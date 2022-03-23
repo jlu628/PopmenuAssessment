@@ -1,0 +1,17 @@
+{
+  "name": "menu_management",
+  "version": "1.0.0",
+  "description": "Popmenu Internship Assessment",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "start": "node index.js"
+  },
+  "author": "Jiayu Lu",
+  "license": "ISC",
+  "dependencies": {
+    "jest": "^27.5.1",
+    "sqlite": "^4.0.25",
+    "sqlite3": "^5.0.2"
+  }
+}
