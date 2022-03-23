@@ -3,58 +3,52 @@ const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite')
 
 const setup = async () => {
-    // Error handling. Console log the error message if occurs
-    const handle = (err) => {
-        if (err) {
-            console.log(err);
-        }
-    }
-    // const db = new sqlite3.Database('./MenuManagement.db', sqlite3.Open_READWRITE, err => handle(err));
     const db = await open({
         filename: path.join(__dirname, './MenuManagement.db'),
         driver: sqlite3.Database
     });
-    
-    // Restuarant model
-    const restuarantScheme = `CREATE TABLE IF NOT EXISTS restuarant (
-        RestuarantID INTEGER NOT NULL PRIMARY KEY,
-        RestuarantName VARCHAR(40) NOT NULL,
-        RestuarantInfo VARCHAR(200)
+    await db.get("PRAGMA foreign_keys = ON");
+
+    // restaurant model
+    const restaurantSchema = `CREATE TABLE IF NOT EXISTS restaurant (
+        RestaurantID INTEGER NOT NULL UNIQUE,
+        RestaurantName VARCHAR(40) NOT NULL PRIMARY KEY,
+        RestaurantInfo VARCHAR(200)
     )`;
-    await db.exec(`DROP TABLE IF EXISTS restuarant`);
-    await db.exec(restuarantScheme);
+    await db.exec(`DROP TABLE IF EXISTS restaurant`);
+    await db.exec(restaurantSchema);
 
     // Menu model
-    const menuScheme = `CREATE TABLE IF NOT EXISTS menu (
-        MenuID INTEGER NOT NULL PRIMARY KEY,
+    const menuSchema = `CREATE TABLE IF NOT EXISTS menu (
+        MenuID INTEGER NOT NULL UNIQUE,
         MenuName VARCHAR(40) NOT NULL,
-        RestuarantID INTEGER,
+        RestaurantID INTEGER,
 
-        FOREIGN KEY(RestuarantID) REFERENCES restuarant(RestuarantID)
+        CONSTRAINT fk_restaurant_menu FOREIGN KEY(RestaurantID) REFERENCES restaurant(RestaurantID),
+        PRIMARY KEY(MenuName, RestaurantID)
     )`;
     await db.exec(`DROP TABLE IF EXISTS menu`);
-    await db.exec(menuScheme);
+    await db.exec(menuSchema);
 
     // Menu item model
-    const menuItemScheme = `CREATE TABLE IF NOT EXISTS menu_item (
+    const menuItemSchema = `CREATE TABLE IF NOT EXISTS menu_item (
         ItemName VARCHAR(40) NOT NULL PRIMARY KEY
     )`;
     await db.exec(`DROP TABLE IF EXISTS menu_item`);
-    await db.exec(menuItemScheme);
+    await db.exec(menuItemSchema);
 
     // Menu-menu item relation model
-    const menuContainsScheme = `CREATE TABLE IF NOT EXISTS menu_contains (
+    const menuContainsSchema = `CREATE TABLE IF NOT EXISTS menu_contains (
         MenuID INTEGER NOT NULL,
         ItemName VARCHAR(40) NOT NULL,
 
-        FOREIGN KEY(MenuID) REFERENCES menu(MenuID),
-        FOREIGN KEY(ItemName) REFERENCES menu_item(ItemName),
+        CONSTRAINT fk_contains_menu FOREIGN KEY(MenuID) REFERENCES menu(MenuID),
+        CONSTRAINT fk_contains_item FOREIGN KEY(ItemName) REFERENCES menu_item(ItemName),
         PRIMARY KEY (MenuID, ItemName)
     )`;
     await db.exec(`DROP TABLE IF EXISTS menu_contains`);
-    await db.exec(menuContainsScheme);
+    await db.exec(menuContainsSchema);
 
     await db.close(err => handle(err));
 }
-setup()
 module.exports = setup;
