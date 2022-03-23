@@ -9,32 +9,35 @@ const setup = async () => {
     });
     await db.get("PRAGMA foreign_keys = ON");
 
+    // Drop tables
+    await db.exec(`DROP TABLE IF EXISTS menu_contains`);
+    await db.exec(`DROP TABLE IF EXISTS menu`);
+    await db.exec(`DROP TABLE IF EXISTS restaurant`);
+    await db.exec(`DROP TABLE IF EXISTS menu_item`);
+
     // restaurant model
     const restaurantSchema = `CREATE TABLE IF NOT EXISTS restaurant (
         RestaurantID INTEGER NOT NULL UNIQUE,
         RestaurantName VARCHAR(40) NOT NULL PRIMARY KEY,
         RestaurantInfo VARCHAR(200)
     )`;
-    await db.exec(`DROP TABLE IF EXISTS restaurant`);
     await db.exec(restaurantSchema);
 
     // Menu model
     const menuSchema = `CREATE TABLE IF NOT EXISTS menu (
         MenuID INTEGER NOT NULL UNIQUE,
         MenuName VARCHAR(40) NOT NULL,
-        RestaurantID INTEGER,
+        RestaurantID INTEGER NOT NULL,
 
-        CONSTRAINT fk_restaurant_menu FOREIGN KEY(RestaurantID) REFERENCES restaurant(RestaurantID),
+        CONSTRAINT fk_restaurant_menu FOREIGN KEY(RestaurantID) REFERENCES restaurant(RestaurantID) ON DELETE CASCADE,
         PRIMARY KEY(MenuName, RestaurantID)
     )`;
-    await db.exec(`DROP TABLE IF EXISTS menu`);
     await db.exec(menuSchema);
 
     // Menu item model
     const menuItemSchema = `CREATE TABLE IF NOT EXISTS menu_item (
         ItemName VARCHAR(40) NOT NULL PRIMARY KEY
     )`;
-    await db.exec(`DROP TABLE IF EXISTS menu_item`);
     await db.exec(menuItemSchema);
 
     // Menu-menu item relation model
@@ -42,11 +45,10 @@ const setup = async () => {
         MenuID INTEGER NOT NULL,
         ItemName VARCHAR(40) NOT NULL,
 
-        CONSTRAINT fk_contains_menu FOREIGN KEY(MenuID) REFERENCES menu(MenuID),
-        CONSTRAINT fk_contains_item FOREIGN KEY(ItemName) REFERENCES menu_item(ItemName),
+        CONSTRAINT fk_contains_menu FOREIGN KEY(MenuID) REFERENCES menu(MenuID) ON DELETE CASCADE,
+        CONSTRAINT fk_contains_item FOREIGN KEY(ItemName) REFERENCES menu_item(ItemName) ON DELETE CASCADE,
         PRIMARY KEY (MenuID, ItemName)
     )`;
-    await db.exec(`DROP TABLE IF EXISTS menu_contains`);
     await db.exec(menuContainsSchema);
 
     await db.close(err => handle(err));

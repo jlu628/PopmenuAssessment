@@ -12,7 +12,7 @@ const sqliteExec = async (sql) => {
     try {
         await db.exec(sql);
     } catch (err) {
-        console.log(err)
+        // console.log(err)
         await db.close();
         throw err;
     }
@@ -30,7 +30,7 @@ const sqliteGet = async (sql) => {
     try {
         res = await db.all(sql);
     } catch (err) {
-        console.log(err)
+        // console.log(err)
         await db.close();
         throw err;
     }

@@ -1,10 +1,10 @@
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const { open } = require('sqlite')
-const setup = require('../setup')
+const { open } = require('sqlite');
+const setup = require('../setup');
+const axios = require('axios')
 
-// Level 1 & 2 tests
-describe("Level 1 & 2", ()=>{
+describe("Level 1 & 2 tests", ()=>{
     let db;
     beforeEach(async () => {
         await setup();
@@ -90,9 +90,9 @@ describe("Level 1 & 2", ()=>{
             await db.exec(`INSERT INTO menu_item (ItemName) VALUES ('menu item${i+1}')`);
         }
 
-        let restaurants = await db.all(`SELECT * from menu_item`);
-        expect(restaurants.length).toBe(3);
-        expect(restaurants).toEqual(
+        let items = await db.all(`SELECT * from menu_item`);
+        expect(items.length).toBe(3);
+        expect(items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ItemName: 'menu item1'}),
                 expect.objectContaining({ItemName: 'menu item2'}),
@@ -111,7 +111,7 @@ describe("Level 1 & 2", ()=>{
         }
     });
 
-    it("Integration test", async () => {
+    it("Insert item to menus", async () => {
         /*
         restaurant1:
             Menu1:
@@ -181,5 +181,359 @@ describe("Level 1 & 2", ()=>{
                 expect.objectContaining({ItemName: 'item2'}),
             ])
         );
+    });
+});
+
+describe("Server tests", () => {
+    let instance;
+    let port;
+
+    beforeEach(async () => {
+        delete require.cache[require.resolve('../server')];
+        const server = require('../server');
+        port = process.env.PORT || 8000;
+        await setup();
+        let started = false;
+        instance = server.listen(port, () => started = true);
+        
+        // wait until server fully starts
+        const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
+        while (!started) {
+            await delay(50);
+        }
+    });
+
+    afterEach(async () => {
+        instance.close();
     })
-})
+
+    it("Add restaurant", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+    });
+
+    it("Add duplicated restaurants", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(false);
+    });
+
+    it("Retrieve restaurants", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant2",
+            RestaurantInfo: "description2" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/get/restaurant`);
+        expect(res.data.success).toBe(true);
+        const restaurants = res.data.data;
+        expect(restaurants.length).toBe(2);
+        expect(restaurants).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({RestaurantName: 'restaurant1', RestaurantInfo: 'description1'}),
+                expect.objectContaining({RestaurantName: 'restaurant2', RestaurantInfo: 'description2'}),
+            ])
+        );
+    });
+
+    it("Add menus", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);    
+    });
+
+    it("Add duplicated menus to same restaurant", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(false);
+    });
+
+    it("Add menu to non-existing restuarant", async () => {
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(false);
+    });
+
+    it("Retrieve menu", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu2"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/get/menu`, {
+            RestaurantName: "restaurant1"
+        });
+        expect(res.data.success).toBe(true);
+        const menus = res.data.data;
+        expect(menus.length).toBe(2);
+        expect(menus).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({MenuName: 'menu1'}),
+                expect.objectContaining({MenuName: 'menu2'}),
+            ])
+        );    
+    });
+
+    it("Add menu item", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/item`, {
+            "ItemName": "item1"
+        });
+        expect(res.data.success).toBe(true);
+    });
+
+    it("Add duplicated menu item", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/item`, {
+            "ItemName": "item1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/item`, {
+            "ItemName": "item1"
+        });
+        expect(res.data.success).toBe(false);
+    });
+
+    it("Add item to menu", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/item`, {
+            "ItemName": "item1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu_item`, {
+            "ItemName": "item1",
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant1"
+        });
+        expect(res.data.success).toBe(true);
+    });
+
+    it("Add item to non-existing menu", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/item`, {
+            "ItemName": "item1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu_item`, {
+            "ItemName": "item1",
+            "MenuName": "menu2",
+            "RestaurantName": "restaurant1"
+        });
+        expect(res.data.success).toBe(false);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu_item`, {
+            "ItemName": "item1",
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant2"
+        });
+        expect(res.data.success).toBe(false);
+    });
+
+    it("Add non-existing item", async () => {
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu_item`, {
+            "ItemName": "item",
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant1"
+        });
+        expect(res.data.success).toBe(false);
+    });
+
+    it("Retrive items from a menu", async () => {
+        /*
+        restaurant1:
+            Menu1:
+                item1
+                item2
+            Menu2:
+
+        restaurant2:
+            Menu1:
+                item2
+        */
+        let res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant1",
+            RestaurantInfo: "description1" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/restaurant/`, {
+            RestaurantName: "restaurant2",
+            RestaurantInfo: "description2" 
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant1",
+            MenuName: "menu2"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu`, {
+            RestaurantName: "restaurant2",
+            MenuName: "menu1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/item`, {
+            "ItemName": "item1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/item`, {
+            "ItemName": "item2"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu_item`, {
+            "ItemName": "item1",
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu_item`, {
+            "ItemName": "item2",
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant1"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/add/menu_item`, {
+            "ItemName": "item2",
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant2"
+        });
+        expect(res.data.success).toBe(true);
+
+        res = await axios.post(`http://127.0.0.1:${port}/get/menu_item`, {
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant1"
+        });
+        expect(res.data.success).toBe(true);
+        const restaurant1Menu1Items = res.data.data;
+        expect(restaurant1Menu1Items.length).toBe(2);
+        expect(restaurant1Menu1Items).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ItemName: 'item1'}),
+                expect.objectContaining({ItemName: 'item2'}),
+            ])
+        ); 
+
+        res = await axios.post(`http://127.0.0.1:${port}/get/menu_item`, {
+            "MenuName": "menu2",
+            "RestaurantName": "restaurant1"
+        });
+        expect(res.data.success).toBe(true);
+        const restaurant1Menu2Items = res.data.data;
+        expect(restaurant1Menu2Items.length).toBe(0);
+
+        res = await axios.post(`http://127.0.0.1:${port}/get/menu_item`, {
+            "MenuName": "menu1",
+            "RestaurantName": "restaurant2"
+        });
+        expect(res.data.success).toBe(true);
+        const restaurant2Menu1Items = res.data.data;
+        expect(restaurant2Menu1Items.length).toBe(1);
+        expect(restaurant2Menu1Items).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ItemName: 'item2'}),
+            ])
+        ); 
+    })
+});
