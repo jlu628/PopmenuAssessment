@@ -1,5 +1,7 @@
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const { open } = require('sqlite')
+
 const setup = async () => {
     // Error handling. Console log the error message if occurs
     const handle = (err) => {
@@ -7,10 +9,9 @@ const setup = async () => {
             console.log(err);
         }
     }
-
     // const db = new sqlite3.Database('./MenuManagement.db', sqlite3.Open_READWRITE, err => handle(err));
     const db = await open({
-        filename: './MenuManagement.db',
+        filename: path.join(__dirname, './MenuManagement.db'),
         driver: sqlite3.Database
     });
     
@@ -28,6 +29,7 @@ const setup = async () => {
         MenuID INTEGER NOT NULL PRIMARY KEY,
         MenuName VARCHAR(40) NOT NULL,
         RestuarantID INTEGER,
+
         FOREIGN KEY(RestuarantID) REFERENCES restuarant(RestuarantID)
     )`;
     await db.exec(`DROP TABLE IF EXISTS menu`);
@@ -42,8 +44,9 @@ const setup = async () => {
 
     // Menu-menu item relation model
     const menuContainsScheme = `CREATE TABLE IF NOT EXISTS menu_contains (
-        MenuID INTEGER,
-        ItemName VARCHAR(40),
+        MenuID INTEGER NOT NULL,
+        ItemName VARCHAR(40) NOT NULL,
+
         FOREIGN KEY(MenuID) REFERENCES menu(MenuID),
         FOREIGN KEY(ItemName) REFERENCES menu_item(ItemName),
         PRIMARY KEY (MenuID, ItemName)
