@@ -1,6 +1,7 @@
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
-const { open } = require('sqlite')
+const { open } = require('sqlite');
+const sqlite3Binding = require('sqlite3/lib/sqlite3-binding');
 
 const sqliteExec = async (sql) => {
     const db = await open({
@@ -12,7 +13,7 @@ const sqliteExec = async (sql) => {
     try {
         await db.exec(sql);
     } catch (err) {
-        // console.log(err)
+        console.log(err)
         await db.close();
         throw err;
     }
@@ -30,7 +31,7 @@ const sqliteGet = async (sql) => {
     try {
         res = await db.all(sql);
     } catch (err) {
-        // console.log(err)
+        console.log(err)
         await db.close();
         throw err;
     }
@@ -189,6 +190,34 @@ const getMenuItems = async (req, res) => {
     res.end();
 }
 
+const addCustomer = async (req, res) => {
+    const {FirstName, LastName } = req.body;
+    let msg = {};
+    try {
+        await sqliteExec(`INSERT INTO customer (FirstName, LastName) VALUES ('${FirstName}', '${LastName}')`);
+        msg.success = true;
+    } catch {
+        msg.success = false;
+        msg.error = "Customer already exist";
+    }
+    res.write(JSON.stringify(msg));
+    res.end();
+}
+
+
+const getCustomer = async (req, res) => {
+    let msg = {};
+    try {
+        const queryRes = await sqliteGet(`SELECT * FROM customer`);
+        msg.data = queryRes
+    } catch {
+        msg.success = false;
+        msg.error = "Failed to retrive customers";
+    }
+    res.write(JSON.stringify(msg));
+    res.end();
+}
+
 /**
 * A diner can order a dinner salad one of two ways:
 *      As a standalone dish, with selection of dressing
@@ -196,15 +225,196 @@ const getMenuItems = async (req, res) => {
 * A diner can order a side of any dressing with any appetizer or entree
 */
 const order = async (req, res) => {
+    const {FirstName, LastName, RestaurantName, Items } = req.body;
+    let RestaurantID;
+    let OrderID;
+    let msg = {};
 
+    try {
+        RestaurantID = await sqliteGet(`SELECT RestaurantID FROM restaurant WHERE RestaurantName == '${RestaurantName}'`);
+        RestaurantID = RestaurantID[0].RestaurantID;
 
+        OrderID = await sqliteGet(`SELECT IFNULL(MAX(OrderID), 0) + 1 AS OrderID FROM customer_order`);
+        OrderID = OrderID[0].OrderID;
+
+        const weekdaySql = `(CASE CAST(STRFTIME('%w', 'now') AS INTEGER)
+                WHEN 0 THEN 'Sunday'
+                WHEN 1 THEN 'Monday'
+                WHEN 2 THEN 'Tuesday'
+                WHEN 3 THEN 'Wednesday'
+                WHEN 4 THEN 'Thursday'
+                WHEN 5 THEN 'Friday'
+                ELSE 'Saturday' 
+            END)`
+        await sqliteExec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            ${OrderID},
+            ${RestaurantID},
+            '${FirstName}',
+            '${LastName}',
+            ${weekdaySql}
+        )`);
+
+    } catch (err) {
+        msg.success = false;
+        msg.error = "Failed to add items to order";
+        res.write(JSON.stringify(msg));
+        res.end();
+        return;
+    }
+
+    Items.forEach(async item => {
+        try {
+            await sqliteExec(`INSERT INTO order_contains (OrderID, RestaurantID, ItemName, Quantity) VALUES (
+                ${OrderID},
+                ${RestaurantID},
+                '${item.ItemName}',
+                '${!isNaN(item.Quantity) && item.Quantity > 0 ? item.Quantity : 1}'
+            )`);
+        } catch (err) {
+            console.log("second");
+
+            msg.success = false;
+            msg.error = "Failed to add items to order";
+            res.write(JSON.stringify(msg));
+            res.end();
+            return;
+        }
+    });
+
+    msg.success = true;
+    res.write(JSON.stringify(msg));
+    res.end();
+}
+
+const getOrdersByCustomer = async (req, res) => {
+    const { FirstName, LastName } = req.body;
+    let queryRes = {};
+    let msg = {};
+
+    try {
+        const orders = await sqliteGet(`SELECT OrderID FROM customer_order WHERE FirstName == '${FirstName}' and LastName == '${LastName}'`);
+        for (const order of orders) {
+            const RestaurantName = await sqliteGet(
+                `SELECT RestaurantName FROM restaurant JOIN customer_order ON restaurant.RestaurantID == restaurant.RestaurantID WHERE OrderID == ${order.OrderID}`
+            );
+            const items = await sqliteGet(`SELECT ItemName FROM order_contains WHERE OrderID == ${order.OrderID}`);
+            queryRes[order.OrderID] = {};
+            queryRes[order.OrderID].RestaurantName = RestaurantName[0].RestaurantName;
+            queryRes[order.OrderID].items = items.map(item => item.ItemName);
+        }
+        msg.data = queryRes;
+        msg.success = true;
+    } catch (err) {
+        console.log(err)
+        msg.success = false;
+        msg.error = "Failed to retrive orders";
+    }
+    res.write(JSON.stringify(msg));
+    res.end();
+}
+
+const getOrdersByRestaurant = async (req, res) => {
+    const { RestaurantName } = req.body;
+    let queryRes = {};
+    let msg = {};
+
+    try {
+        let RestaurantID  = await sqliteGet(`SELECT RestaurantID FROM restaurant WHERE RestaurantName == '${RestaurantName}'`);
+        RestaurantID = RestaurantID[0].RestaurantID;
+        const orders = await sqliteGet(`SELECT OrderID, FirstName, LastName FROM customer_order WHERE RestaurantID == ${RestaurantID}`);
+
+        for (const order of orders) {
+            const items = await sqliteGet(`SELECT ItemName, Quantity FROM order_contains WHERE OrderID == ${order.OrderID}`);
+            queryRes[order.OrderID] = {};
+            queryRes[order.OrderID].FirstName = order.FirstName;
+            queryRes[order.OrderID].LastName = order.FirstName;
+            queryRes[order.OrderID].items = items.map(item => ({
+                "ItemName": item.ItemName,
+                "Quantity": item.Quantity
+            }));
+        }
+        msg.data = queryRes;
+    } catch (err) {
+        msg.success = false;
+        msg.error = "Fail to retrive orders";
+    }
+    res.write(JSON.stringify(msg));
+    res.end();
+}
+
+// Predict the likelihood of a customer visiting the restaurant on each day of the week and the likelihood he/she will order a dish
+const predict = async (req, res) => {
+    const { FirstName, LastName, RestaurantName } = req.body;
+    let queryRes = {};
+    let msg = {};
+
+    try {
+        let RestaurantID  = await sqliteGet(`SELECT RestaurantID FROM restaurant WHERE RestaurantName == '${RestaurantName}'`);
+        RestaurantID = RestaurantID[0].RestaurantID;
+        const orders = await sqliteGet(
+            `SELECT Weekday, OrderID FROM customer_order WHERE FirstName == '${FirstName}' and LastName == '${LastName}' AND RestaurantID == ${RestaurantID}`
+        );
+        let weekdays = {
+            'Monday': 0, 
+            'Tuesday': 0,
+            'Wednesday':0,
+            'Thursday':0,
+            'Friday':0,
+            'Saturday':0,
+            'Sunday':0
+        };
+        let items = {};
+        
+        for (const order of orders) {
+            weekdays[order.Weekday] ++;
+            const orderItems = await sqliteGet(`SELECT ItemName, Quantity FROM order_contains WHERE OrderID == ${order.OrderID}`);
+            orderItems.forEach(item => {
+                items[item.ItemName] = items[item.ItemName] ? items[item.ItemName] + item.Quantity : item.Quantity;
+            });
+        }
+
+        // Normalize probabilities
+        let weekdaySum = 0;
+        for (const weekday in weekdays) {
+            weekdaySum += weekdays[weekday];
+        }
+        for (const weekday in weekdays) {
+            weekdays[weekday] /= weekdaySum;
+        }
+
+        let itemSum = 0;
+        for (const item in items) {
+            itemSum += items[item];
+        }
+        for (const item in items) {
+            items[item] /= itemSum;
+        }
+        queryRes.weekdays = weekdays;
+        queryRes.items = items;
+        msg.data = queryRes;
+        msg.success = true;
+
+    } catch {
+        msg.success = false;
+        msg.error = "Operation failed";
+    }
+    res.write(JSON.stringify(msg));
+    res.end();
 }
 
 exports.addRestaurant = addRestaurant;
 exports.addMenu = addMenu;
 exports.addMenuItem = addMenuItem;
 exports.addItemToMenu = addItemToMenu;
+
 exports.getRestaurants = getRestaurants;
 exports.getMenu = getMenu;
 exports.getMenuItems = getMenuItems;
+
+exports.addCustomer = addCustomer;
+exports.getCustomer = getCustomer;
+
 exports.order = order;
+exports.getOrdersByCustomer = getOrdersByCustomer;
+exports.getOrdersByRestaurant = getOrdersByRestaurant;
+exports.predict = predict;

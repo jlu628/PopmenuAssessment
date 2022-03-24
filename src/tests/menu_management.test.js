@@ -4,7 +4,7 @@ const { open } = require('sqlite');
 const setup = require('../setup');
 const axios = require('axios')
 
-describe("Level 1 & 2 tests", ()=>{
+describe("Restaurant-Menu-Item schema tests", ()=>{
     let db;
     beforeEach(async () => {
         await setup();
@@ -12,6 +12,7 @@ describe("Level 1 & 2 tests", ()=>{
             filename: path.join(__dirname, '../MenuManagement.db'),
             driver: sqlite3.Database
         });
+        await db.get("PRAGMA foreign_keys = ON");
     });
     afterEach(async () => {
         await db.close();
@@ -20,11 +21,16 @@ describe("Level 1 & 2 tests", ()=>{
     it("Database setup", async () => {
         let tables = await db.all("select name from sqlite_master where type='table'");
         tables = tables.map(table=>table.name);
-        expect(tables.length).toBe(4);
+        expect(tables.length).toBe(7);
         expect(tables).toContainEqual('restaurant');
         expect(tables).toContainEqual('menu');
         expect(tables).toContainEqual('menu_item');
         expect(tables).toContainEqual('menu_contains');
+
+        expect(tables).toContainEqual('customer');
+        expect(tables).toContainEqual('customer_order');
+        expect(tables).toContainEqual('order_contains');
+
     });
 
     it("Insert restaurants", async () => {
@@ -230,6 +236,292 @@ describe("Level 1 & 2 tests", ()=>{
                 expect.objectContaining({ItemName: 'item2'}),
             ])
         );
+    });
+});
+
+describe("Customer-Order schema tests", ()=>{
+    /**
+     * Restaurant1
+     *      Menu1
+     *          Item1
+     *          Item2
+     *      Menu2
+     *          Item1
+     *          Item3
+     * 
+     * Restaurant2
+     *      Menu1
+     *          Item1
+     *      Menu2
+     *          Item2
+     */
+
+    let db;
+    beforeEach(async () => {
+        await setup();
+        db = await open({
+            filename: path.join(__dirname, '../MenuManagement.db'),
+            driver: sqlite3.Database
+        });
+        await db.get("PRAGMA foreign_keys = ON");
+
+        // Restaurants
+        await db.exec(
+            `INSERT INTO restaurant (RestaurantID, RestaurantName, RestaurantInfo) VALUES (
+                (SELECT IFNULL(MAX(RestaurantID), 0) + 1 FROM restaurant), 
+                'Restaurant1', 
+                'Description1'
+            )`
+            );
+        await db.exec(
+            `INSERT INTO restaurant (RestaurantID, RestaurantName, RestaurantInfo) VALUES (
+                (SELECT IFNULL(MAX(RestaurantID), 0) + 1 FROM restaurant), 
+                'Restaurant2', 
+                'Description2'
+            )`
+            );
+
+        // Menus
+        await db.exec(
+            `INSERT INTO menu (MenuID, MenuName, RestaurantID) VALUES (
+                (SELECT IFNULL(MAX(MenuID), 0) + 1 FROM menu), 
+                'Menu1', 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1')
+            )`
+        );
+        await db.exec(
+            `INSERT INTO menu (MenuID, MenuName, RestaurantID) VALUES (
+                (SELECT IFNULL(MAX(MenuID), 0) + 1 FROM menu), 
+                'Menu2', 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1')
+            )`
+        );
+        await db.exec(
+            `INSERT INTO menu (MenuID, MenuName, RestaurantID) VALUES (
+                (SELECT IFNULL(MAX(MenuID), 0) + 1 FROM menu), 
+                'Menu1', 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant2')
+            )`
+        );
+        await db.exec(
+            `INSERT INTO menu (MenuID, MenuName, RestaurantID) VALUES (
+                (SELECT IFNULL(MAX(MenuID), 0) + 1 FROM menu), 
+                'Menu2', 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant2')
+            )`
+        );
+
+        // Items
+        await db.exec(`INSERT INTO menu_item (ItemName, ItemDescription, RestaurantID) VALUES (
+                'Item1',
+                'description',
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1')
+            )`
+        );
+        await db.exec(`INSERT INTO menu_item (ItemName, ItemDescription, RestaurantID) VALUES (
+                'Item2',
+                'description',
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1')
+            )`
+        );
+        await db.exec(`INSERT INTO menu_item (ItemName, ItemDescription, RestaurantID) VALUES (
+                'Item3',
+                'description',
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1')
+            )`
+        );
+        await db.exec(`INSERT INTO menu_item (ItemName, ItemDescription, RestaurantID) VALUES (
+                'Item1',
+                'description',
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant2')
+            )`
+        );
+        await db.exec(`INSERT INTO menu_item (ItemName, ItemDescription, RestaurantID) VALUES (
+                'Item2',
+                'description',
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant2')
+            )`
+        );
+
+        // Menu-item
+        await db.exec(`INSERT INTO menu_contains (MenuID, RestaurantID, ItemName) VALUES (
+                (SELECT MenuID FROM menu JOIN restaurant ON menu.RestaurantID = restaurant.RestaurantID WHERE RestaurantName == 'Restaurant1' AND MenuName = 'Menu1'), 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1'), 
+                'Item1'
+            )`
+        );
+        await db.exec(`INSERT INTO menu_contains (MenuID, RestaurantID, ItemName) VALUES (
+                (SELECT MenuID FROM menu JOIN restaurant ON menu.RestaurantID = restaurant.RestaurantID WHERE RestaurantName == 'Restaurant1' AND MenuName = 'Menu1'), 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1'), 
+                'Item2'
+            )`
+        );
+        await db.exec(`INSERT INTO menu_contains (MenuID, RestaurantID, ItemName) VALUES (
+                (SELECT MenuID FROM menu JOIN restaurant ON menu.RestaurantID = restaurant.RestaurantID WHERE RestaurantName == 'Restaurant1' AND MenuName = 'Menu2'), 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1'), 
+                'Item1'
+            )`
+        );
+        await db.exec(`INSERT INTO menu_contains (MenuID, RestaurantID, ItemName) VALUES (
+                (SELECT MenuID FROM menu JOIN restaurant ON menu.RestaurantID = restaurant.RestaurantID WHERE RestaurantName == 'Restaurant1' AND MenuName = 'Menu2'), 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant1'), 
+                'Item3'
+            )`
+        );
+        await db.exec(`INSERT INTO menu_contains (MenuID, RestaurantID, ItemName) VALUES (
+                (SELECT MenuID FROM menu JOIN restaurant ON menu.RestaurantID = restaurant.RestaurantID WHERE RestaurantName == 'Restaurant2' AND MenuName = 'Menu1'), 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant2'), 
+                'Item1'
+            )`
+        );
+        await db.exec(`INSERT INTO menu_contains (MenuID, RestaurantID, ItemName) VALUES (
+                (SELECT MenuID FROM menu JOIN restaurant ON menu.RestaurantID = restaurant.RestaurantID WHERE RestaurantName == 'Restaurant2' AND MenuName = 'Menu2'), 
+                (SELECT RestaurantID FROM restaurant WHERE RestaurantName == 'Restaurant2'), 
+                'Item2'
+            )`
+        );
+    });
+
+    afterEach(async () => {
+        await db.close();
+    });
+
+    it('Insert customer', async () => {
+        await db.exec(`INSERT INTO customer (FirstName, LastName) VALUES ('FirstName1', 'LastName1')`);
+        await db.exec(`INSERT INTO customer (FirstName, LastName) VALUES ('FirstName2', 'LastName2')`);
+
+        const customers = await db.all(`SELECT * FROM customer`);
+        expect(customers.length).toBe(2);
+        expect(customers).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({FirstName: 'FirstName1', LastName: 'LastName1'}),
+                expect.objectContaining({FirstName: 'FirstName2', LastName: 'LastName2'}),
+            ])
+        );
+    });
+
+    it('Create order', async () => {
+        await db.exec(`INSERT INTO customer (FirstName, LastName) VALUES ('FirstName1', 'LastName1')`);
+        await db.exec(`INSERT INTO customer (FirstName, LastName) VALUES ('FirstName2', 'LastName2')`);
+        const weekdaySql = `(CASE CAST(STRFTIME('%w', 'now') AS INTEGER)
+                WHEN 0 THEN 'Sunday'
+                WHEN 1 THEN 'Monday'
+                WHEN 2 THEN 'Tuesday'
+                WHEN 3 THEN 'Wednesday'
+                WHEN 4 THEN 'Thursday'
+                WHEN 5 THEN 'Friday'
+                ELSE 'Saturday' 
+            END)`
+        await db.exec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            (SELECT IFNULL(MAX(OrderID), 0) + 1 FROM customer_order),
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'FirstName1',
+            'LastName1',
+            ${weekdaySql}
+        )`);
+        await db.exec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            (SELECT IFNULL(MAX(OrderID), 0) + 1 FROM customer_order),
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant2'),
+            'FirstName1',
+            'LastName1',
+            ${weekdaySql}
+        )`);
+        await db.exec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            (SELECT IFNULL(MAX(OrderID), 0) + 1 FROM customer_order),
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'FirstName2',
+            'LastName2',
+            ${weekdaySql}
+        )`);
+
+        const customer1Order = await db.all(`SELECT * FROM customer_order WHERE FirstName == 'FirstName1' AND LastName == 'LastName1'`);
+        const customer2Order = await db.all(`SELECT * FROM customer_order WHERE FirstName == 'FirstName2' AND LastName == 'LastName2'`);
+
+        expect(customer1Order.length).toBe(2);
+        expect(customer2Order.length).toBe(1);
+    });
+    it('Create order when customer not exist', async () => {
+        const insert = async () => await db.exec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            (SELECT IFNULL(MAX(OrderID), 0) + 1 FROM customer_order),
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'FirstName2',
+            'LastName2',
+            'Monday'
+        )`);
+        await expect(insert()).rejects.toThrow();
+    });
+
+    it('Add item to order', async () => {
+        // Orders item1, item2 at restaurant1
+        await db.exec(`INSERT INTO customer (FirstName, LastName) VALUES ('FirstName', 'LastName')`);
+
+        await db.exec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            1,
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'FirstName',
+            'LastName',
+            'Monday'
+        )`);
+
+        await db.exec(`INSERT INTO order_contains (OrderID, RestaurantID, ItemName) VALUES (
+            1,
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'Item1'
+        )`);
+        await db.exec(`INSERT INTO order_contains (OrderID, RestaurantID, ItemName) VALUES (
+            1,
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'Item2'
+        )`);
+
+        const order = await db.all(`SELECT * FROM order_contains WHERE OrderID = 1`);
+        expect(order.length).toBe(2);
+        expect(order).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ItemName: 'Item1'}),
+                expect.objectContaining({ItemName: 'Item2'})
+            ])
+        );
+    });
+
+    it('Add item to order when item not exist', async () => {
+        // Orders item1, item2 at restaurant1
+        await db.exec(`INSERT INTO customer (FirstName, LastName) VALUES ('FirstName', 'LastName')`);
+
+        await db.exec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            1,
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'FirstName',
+            'LastName',
+            'Monday'
+        )`);
+
+        const insert = async () => await db.exec(`INSERT INTO order_contains (OrderID, RestaurantID, ItemName) VALUES (
+            1,
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant2'),
+            'Item1'
+        )`);
+        await expect(insert()).rejects.toThrow();
+    });
+
+    it('Add item to order when restaurant not match', async () => {
+        // Orders item1, item2 at restaurant1
+        await db.exec(`INSERT INTO customer (FirstName, LastName) VALUES ('FirstName', 'LastName')`);
+
+        await db.exec(`INSERT INTO customer_order (OrderID, RestaurantID, FirstName, LastName, Weekday) VALUES (
+            1,
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant1'),
+            'FirstName',
+            'LastName',
+            'Monday'
+        )`);
+
+        const insert = async () => await db.exec(`INSERT INTO order_contains (OrderID, RestaurantID, ItemName) VALUES (
+            1,
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName = 'Restaurant2'),
+            'Item1'
+        )`);
+        await expect(insert()).rejects.toThrow();
     });
 });
 

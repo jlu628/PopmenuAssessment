@@ -10,6 +10,10 @@ const setup = async () => {
     await db.get("PRAGMA foreign_keys = ON");
 
     // Drop tables
+    await db.exec(`DROP TABLE IF EXISTS order_contains`);
+    await db.exec(`DROP TABLE IF EXISTS customer_order`);
+    await db.exec(`DROP TABLE IF EXISTS customer`);
+
     await db.exec(`DROP TABLE IF EXISTS menu_contains`);
     await db.exec(`DROP TABLE IF EXISTS menu_item`);
     await db.exec(`DROP TABLE IF EXISTS menu`);
@@ -59,6 +63,42 @@ const setup = async () => {
         PRIMARY KEY (MenuID, ItemName)
     )`;
     await db.exec(menuContainsSchema);
+
+    // Customers model (Level 3 & 4) 
+    const customerSchema = `CREATE TABLE IF NOT EXISTS customer (
+        FirstName VARCHAR(40),
+        LastName VARCHAR(40),
+
+        PRIMARY KEY (FirstName, LastName)
+    )`;
+    await db.exec(customerSchema);
+
+    // Customers model (Level 3 & 4) 
+    const orderSchema = `CREATE TABLE IF NOT EXISTS customer_order (
+        OrderID INTEGER NOT NULL,
+        RestaurantID INTEGER NOT NULL,
+        FirstName VARCHAR(40),
+        LastName VARCHAR(40),
+        Weekday VARCHAR(10),
+
+        PRIMARY KEY (OrderID, RestaurantID),
+        CONSTRAINT weekday_values CHECK(Weekday IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' , 'Sunday')),
+        CONSTRAINT fk_customer_order FOREIGN KEY(FirstName, LastName) REFERENCES customer(FirstName, LastName) ON DELETE CASCADE,
+        CONSTRAINT fk_restaurant_order FOREIGN KEY(RestaurantID) REFERENCES restaurant(RestaurantID) ON DELETE CASCADE
+    )`;
+    await db.exec(orderSchema);
+
+    // Order-item relation model (Level 3 & 4)
+    const orderContainsScheme = `CREATE TABLE IF NOT EXISTS order_contains (
+        OrderID INTEGER NOT NULL,
+        ItemName VARCHAR(40) NOT NULL,
+        RestaurantID INTEGER NOT NULL,
+        Quantity INTEGER DEFAULT 1,
+
+        CONSTRAINT fk_order_item FOREIGN KEY(ItemName, RestaurantID) REFERENCES menu_item(ItemName, RestaurantID) ON DELETE CASCADE,
+        CONSTRAINT fk_order_from_restaurant FOREIGN KEY(OrderID, RestaurantID) REFERENCES customer_order(OrderID, RestaurantID) ON DELETE CASCADE
+    )`;
+    await db.exec(orderContainsScheme);
 
     await db.close(err => handle(err));
 }
