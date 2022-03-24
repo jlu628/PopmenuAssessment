@@ -13,7 +13,7 @@ const sqliteExec = async (sql) => {
     try {
         await db.exec(sql);
     } catch (err) {
-        console.log(err)
+        // console.log(err)
         await db.close();
         throw err;
     }
@@ -31,7 +31,7 @@ const sqliteGet = async (sql) => {
     try {
         res = await db.all(sql);
     } catch (err) {
-        console.log(err)
+        // console.log(err)
         await db.close();
         throw err;
     }
@@ -271,8 +271,6 @@ const order = async (req, res) => {
                 '${!isNaN(item.Quantity) && item.Quantity > 0 ? item.Quantity : 1}'
             )`);
         } catch (err) {
-            console.log("second");
-
             msg.success = false;
             msg.error = "Failed to add items to order";
             res.write(JSON.stringify(msg));
@@ -305,7 +303,6 @@ const getOrdersByCustomer = async (req, res) => {
         msg.data = queryRes;
         msg.success = true;
     } catch (err) {
-        console.log(err)
         msg.success = false;
         msg.error = "Failed to retrive orders";
     }
