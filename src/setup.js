@@ -32,6 +32,7 @@ const setup = async () => {
     const menuSchema = `CREATE TABLE IF NOT EXISTS menu (
         MenuID INTEGER NOT NULL UNIQUE,
         MenuName VARCHAR(40) NOT NULL,
+        MenuInfo VARCHAR(200),
         RestaurantID INTEGER NOT NULL,
 
         CONSTRAINT fk_restaurant_menu FOREIGN KEY(RestaurantID) REFERENCES restaurant(RestaurantID) ON DELETE CASCADE,

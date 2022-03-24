@@ -61,12 +61,13 @@ const addRestaurant = async (req, res) => {
 };
 
 const addMenu = async (req, res) => {
-    const { MenuName, RestaurantName } = req.body;
+    const { MenuName, MenuInfo, RestaurantName } = req.body;
     let msg = {};
     try {
         await sqliteExec(            
-            `INSERT INTO menu (MenuID, MenuName, RestaurantID) VALUES (
-                (SELECT IFNULL(MAX(MenuID), 0) + 1 FROM menu), 
+            `INSERT INTO menu (MenuID, MenuInfo, MenuName, RestaurantID) VALUES (
+                (SELECT IFNULL(MAX(MenuID), 0) + 1 FROM menu),
+                '${MenuInfo}',
                 '${MenuName}', 
                 (SELECT RestaurantID FROM restaurant WHERE RestaurantName == '${RestaurantName}')
             )`
@@ -135,13 +136,13 @@ const getRestaurants = async (req, res) => {
     let msg = {};
     try {
         queryRes = await sqliteGet(
-            `SELECT * FROM restaurant`
+            `SELECT RestaurantName, RestaurantInfo FROM restaurant`
         );
         msg.success = true;
         msg.data = queryRes;
     } catch (err) {
         msg.success = false;
-        msg.error = "Menu item already exists in the database";
+        msg.error = "Fail to retrieve restaurants";
     }
 
     res.write(JSON.stringify(msg));
@@ -154,14 +155,14 @@ const getMenu = async (req, res) => {
     let msg = {};
     try {
         queryRes = await sqliteGet(
-            `SELECT * FROM menu WHERE RestaurantID == (
+            `SELECT MenuName, MenuInfo FROM menu WHERE RestaurantID == (
                 SELECT RestaurantID FROM restaurant WHERE RestaurantName == '${RestaurantName}')`
         );
         msg.success = true;
         msg.data = queryRes;
     } catch (err) {
         msg.success = false;
-        msg.error = "Menu item already exists in the database";
+        msg.error = "Fail to retrieve menu";
     }
 
     res.write(JSON.stringify(msg));
@@ -174,8 +175,8 @@ const getMenuItems = async (req, res) => {
     let msg = {};
     try {
         queryRes = await sqliteGet(
-            `SELECT ItemName FROM menu_contains JOIN menu JOIN restaurant 
-            ON menu.RestaurantID = restaurant.RestaurantID AND menu.MenuID == menu_contains.MenuID
+            `SELECT menu_item.ItemName, ItemType, ItemDescription FROM menu_contains JOIN menu_item JOIN menu JOIN restaurant 
+            ON menu.RestaurantID = restaurant.RestaurantID AND menu.MenuID == menu_contains.MenuID AND menu_item.RestaurantID = restaurant.RestaurantID 
             WHERE MenuName == '${MenuName}' AND RestaurantName == '${RestaurantName}'
             `
         );
@@ -183,7 +184,7 @@ const getMenuItems = async (req, res) => {
         msg.data = queryRes;
     } catch (err) {
         msg.success = false;
-        msg.error = "Item already in the menu";
+        msg.error = "Failed to retrieve menu items";
     }
 
     res.write(JSON.stringify(msg));
@@ -212,7 +213,7 @@ const getCustomer = async (req, res) => {
         msg.data = queryRes
     } catch {
         msg.success = false;
-        msg.error = "Failed to retrive customers";
+        msg.error = "Fail to retrive customers";
     }
     res.write(JSON.stringify(msg));
     res.end();
@@ -286,7 +287,7 @@ const order = async (req, res) => {
 
 const getOrdersByCustomer = async (req, res) => {
     const { FirstName, LastName } = req.body;
-    let queryRes = {};
+    let queryRes = [];
     let msg = {};
 
     try {
@@ -295,10 +296,11 @@ const getOrdersByCustomer = async (req, res) => {
             const RestaurantName = await sqliteGet(
                 `SELECT RestaurantName FROM restaurant JOIN customer_order ON restaurant.RestaurantID == restaurant.RestaurantID WHERE OrderID == ${order.OrderID}`
             );
-            const items = await sqliteGet(`SELECT ItemName FROM order_contains WHERE OrderID == ${order.OrderID}`);
-            queryRes[order.OrderID] = {};
-            queryRes[order.OrderID].RestaurantName = RestaurantName[0].RestaurantName;
-            queryRes[order.OrderID].items = items.map(item => item.ItemName);
+            const items = await sqliteGet(`SELECT ItemName, Quantity FROM order_contains WHERE OrderID == ${order.OrderID}`);
+            orderInfo = {};
+            orderInfo.RestaurantName = RestaurantName[0].RestaurantName;
+            orderInfo.Items = items;
+            queryRes.push(orderInfo);
         }
         msg.data = queryRes;
         msg.success = true;
@@ -312,7 +314,7 @@ const getOrdersByCustomer = async (req, res) => {
 
 const getOrdersByRestaurant = async (req, res) => {
     const { RestaurantName } = req.body;
-    let queryRes = {};
+    let queryRes = [];
     let msg = {};
 
     try {
@@ -322,13 +324,11 @@ const getOrdersByRestaurant = async (req, res) => {
 
         for (const order of orders) {
             const items = await sqliteGet(`SELECT ItemName, Quantity FROM order_contains WHERE OrderID == ${order.OrderID}`);
-            queryRes[order.OrderID] = {};
-            queryRes[order.OrderID].FirstName = order.FirstName;
-            queryRes[order.OrderID].LastName = order.FirstName;
-            queryRes[order.OrderID].items = items.map(item => ({
-                "ItemName": item.ItemName,
-                "Quantity": item.Quantity
-            }));
+            orderInfo = {};
+            orderInfo.FirstName = order.FirstName;
+            orderInfo.LastName = order.FirstName;
+            orderInfo.Items = items;
+            queryRes.push(orderInfo);
         }
         msg.data = queryRes;
     } catch (err) {
