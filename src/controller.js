@@ -81,16 +81,28 @@ const addMenu = async (req, res) => {
 };
 
 const addMenuItem = async (req, res) => {
-    const { ItemName } = req.body;
+    const { ItemName, ItemType, ItemDescription, RestaurantName } = req.body;
     let msg = {};
     try {
-        await sqliteExec(            
-            `INSERT INTO menu_item (ItemName) VALUES ('${ItemName}')`
-        )
+        const sql = ItemType ? 
+        `INSERT INTO menu_item (ItemName, ItemType, ItemDescription, RestaurantID) VALUES (
+            '${ItemName}', 
+            '${ItemType}',
+            '${ItemDescription}',
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName == '${RestaurantName}')
+        )` : 
+        `INSERT INTO menu_item (ItemName, ItemType, RestaurantID) VALUES (
+            '${ItemName}',
+            null,
+            '${ItemDescription}',
+            (SELECT RestaurantID FROM restaurant WHERE RestaurantName == '${RestaurantName}')
+        )`;
+        
+        await sqliteExec(sql);
         msg.success = true;
     } catch (err) {
         msg.success = false;
-        msg.error = "Menu item already exists in the database";
+        msg.error = "Failt to add menu item";
     }
 
     res.write(JSON.stringify(msg));
@@ -98,17 +110,14 @@ const addMenuItem = async (req, res) => {
 };
 
 const addItemToMenu = async (req, res) => {
-    const { ItemName, MenuName, RestaurantName} = req.body;
+    const { ItemName, MenuName, RestaurantName } = req.body;
     let msg = {};
     try {
         await sqliteExec(            
-            `INSERT INTO menu_contains (MenuID, ItemName) VALUES (
-                (SELECT MenuID from menu join restaurant 
-                    on menu.RestaurantID = restaurant.RestaurantID 
-                    where RestaurantName == '${RestaurantName}' and MenuName = '${MenuName}'
-                ),
-                '${ItemName}'
-            )`
+            `INSERT INTO menu_contains (MenuID, RestaurantID, ItemName) VALUES (
+                (SELECT MenuID FROM menu join restaurant on menu.RestaurantID = restaurant.RestaurantID WHERE MenuName == '${MenuName}' and RestaurantName == '${RestaurantName}'), 
+                (SELECT RestaurantId FROM restaurant WHERE RestaurantName == '${RestaurantName}'),
+                '${ItemName}')`
         )
         msg.success = true;
     } catch (err) {
@@ -180,6 +189,17 @@ const getMenuItems = async (req, res) => {
     res.end();
 }
 
+/**
+* A diner can order a dinner salad one of two ways:
+*      As a standalone dish, with selection of dressing
+*      As a side of an entree, with selection of dressing
+* A diner can order a side of any dressing with any appetizer or entree
+*/
+const order = async (req, res) => {
+
+
+}
+
 exports.addRestaurant = addRestaurant;
 exports.addMenu = addMenu;
 exports.addMenuItem = addMenuItem;
@@ -187,3 +207,4 @@ exports.addItemToMenu = addItemToMenu;
 exports.getRestaurants = getRestaurants;
 exports.getMenu = getMenu;
 exports.getMenuItems = getMenuItems;
+exports.order = order;
